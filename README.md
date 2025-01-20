@@ -1,111 +1,119 @@
-# mcp-server-fetch-python MCP server
+# mcp-server-fetch-python
 
-A MCP server project
+An MCP server for fetching and transforming web content into various formats. This server provides comprehensive tools for extracting content from web pages, including support for JavaScript-rendered content and media files.
 
-## Components
-
-### Resources
-
-The server implements a simple note storage system with:
-- Custom note:// URI scheme for accessing individual notes
-- Each note resource has a name, description and text/plain mimetype
-
-### Prompts
-
-The server provides a single prompt:
-- summarize-notes: Creates summaries of all stored notes
-  - Optional "style" argument to control detail level (brief/detailed)
-  - Generates prompt combining all current notes with style preference
+## Features
 
 ### Tools
 
-The server implements one tool:
-- add-note: Adds a new note to the server
-  - Takes "name" and "content" as required string arguments
-  - Updates server state and notifies clients of resource changes
+The server provides four specialized tools:
 
-## Configuration
+- **get-raw-text**: Extracts raw text content directly from URLs without browser rendering
+  - Arguments:
+    - `url`: URL of the target web page (text, JSON, XML, csv, tsv, etc.) (required)
+  - Best used for structured data formats or when fast, direct access is needed
 
-[TODO: Add configuration details specific to your implementation]
+- **get-rendered-html**: Fetches fully rendered HTML content using a headless browser
+  - Arguments:
+    - `url`: URL of the target web page (required)
+  - Essential for modern web applications and SPAs that require JavaScript rendering
 
-## Quickstart
+- **get-markdown**: Converts web page content to well-formatted Markdown
+  - Arguments:
+    - `url`: URL of the target web page (required)
+  - Preserves structural elements while providing clean, readable text output
 
-### Install
+- **get-markdown-from-media**: Performs AI-powered content extraction from media files
+  - Arguments:
+    - `url`: URL of the target media file (images, videos) (required)
+  - Utilizes computer vision and OCR for visual content analysis
+  - Requires a valid OPENAI_API_KEY to be set in environment variables
+  - Will return an error message if the API key is not set or if there are issues processing the media file
 
-#### Claude Desktop
+## Usage
 
-On MacOS: `~/Library/Application\ Support/Claude/claude_desktop_config.json`
+### Claude Desktop
+
+To use with Claude Desktop, add the server configuration:
+
+On MacOS:  `~/Library/Application\ Support/Claude/claude_desktop_config.json`  
 On Windows: `%APPDATA%/Claude/claude_desktop_config.json`
 
-<details>
-  <summary>Development/Unpublished Servers Configuration</summary>
-  ```
-  "mcpServers": {
-    "mcp-server-fetch-python": {
-      "command": "uv",
-      "args": [
-        "--directory",
-        "E:\home\publish\mcp-server-fetch-python",
-        "run",
-        "mcp-server-fetch-python"
-      ]
-    }
+```json
+"mcpServers": {
+  "mcp-server-fetch-python": {
+    "command": "uvx",
+    "args": [
+      "mcp-server-fetch-python"
+    ]
   }
-  ```
-</details>
-
-<details>
-  <summary>Published Servers Configuration</summary>
-  ```
-  "mcpServers": {
-    "mcp-server-fetch-python": {
-      "command": "uvx",
-      "args": [
-        "mcp-server-fetch-python"
-      ]
-    }
-  }
-  ```
-</details>
-
-## Development
-
-### Building and Publishing
-
-To prepare the package for distribution:
-
-1. Sync dependencies and update lockfile:
-```bash
-uv sync
+}
 ```
 
-2. Build package distributions:
-```bash
+
+## Environment Variables
+
+The following environment variables can be configured:
+
+- **OPENAI_API_KEY**: Required for using the `get-markdown-from-media` tool. This key is needed for AI-powered image analysis and content extraction.
+- **PYTHONIOENCODING**: Set to "utf-8" if you encounter character encoding issues in the output.
+- **MODEL_NAME**: Specifies the model name to use. Defaults to "gpt-4o".
+
+```json
+"mcpServers": {
+  "mcp-server-fetch-python": {
+    "command": "uvx",
+    "args": [
+      "mcp-server-fetch-python"
+    ],
+    "env": {
+        "OPENAI_API_KEY": "sk-****",
+        "PYTHONIOENCODING": "utf-8",
+        "MODEL_NAME": "gpt-4o",        
+    }
+  }
+}
+```
+
+
+### Local Installation
+
+Alternatively, you can install and run the server locally:
+
+```powershell
+git clone https://github.com/tatn/mcp-server-fetch-python.git
+cd mcp-server-fetch-python
+uv sync
 uv build
 ```
 
-This will create source and wheel distributions in the `dist/` directory.
+Then add the following configuration to Claude Desktop config file:
 
-3. Publish to PyPI:
-```bash
-uv publish
+```json
+"mcpServers": {
+  "mcp-server-fetch-python": {
+    "command": "uv",
+    "args": [
+      "--directory",
+      "path\\to\\mcp-server-fetch-python",  # Replace with actual path to the cloned repository
+      "run",
+      "mcp-server-fetch-python"
+    ]
+  }
+}
 ```
 
-Note: You'll need to set PyPI credentials via environment variables or command flags:
-- Token: `--token` or `UV_PUBLISH_TOKEN`
-- Or username/password: `--username`/`UV_PUBLISH_USERNAME` and `--password`/`UV_PUBLISH_PASSWORD`
+## Development
 
 ### Debugging
 
-Since MCP servers run over stdio, debugging can be challenging. For the best debugging
-experience, we strongly recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector).
+You can start the MCP Inspector using [npx](https://docs.npmjs.com/cli/v11/commands/npx)with the following commands:
 
-
-You can launch the MCP Inspector via [`npm`](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) with this command:
 
 ```bash
-npx @modelcontextprotocol/inspector uv --directory E:\home\publish\mcp-server-fetch-python run mcp-server-fetch-python
+npx @modelcontextprotocol/inspector uvx mcp-server-fetch-python
 ```
 
-
-Upon launching, the Inspector will display a URL that you can access in your browser to begin debugging.
+```bash
+npx @modelcontextprotocol/inspector uv --directory path\\to\\mcp-server-fetch-python run mcp-server-fetch-python
+```

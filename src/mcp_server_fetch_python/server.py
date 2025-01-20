@@ -1,97 +1,15 @@
-import asyncio
-
-from mcp.server.models import InitializationOptions
-import mcp.types as types
-from mcp.server import NotificationOptions, Server
-from pydantic import AnyUrl
+import httpx
 import mcp.server.stdio
+import mcp.types as types
+from markitdown import MarkItDown, _markitdown
+from mcp.server import NotificationOptions, Server
+from mcp.server.models import InitializationOptions
+from openai import OpenAI
+from playwright.async_api import async_playwright
 
-# Store notes as a simple key-value dict to demonstrate state management
-notes: dict[str, str] = {}
+from mcp_server_fetch_python.settings import config
 
 server = Server("mcp-server-fetch-python")
-
-@server.list_resources()
-async def handle_list_resources() -> list[types.Resource]:
-    """
-    List available note resources.
-    Each note is exposed as a resource with a custom note:// URI scheme.
-    """
-    return [
-        types.Resource(
-            uri=AnyUrl(f"note://internal/{name}"),
-            name=f"Note: {name}",
-            description=f"A simple note named {name}",
-            mimeType="text/plain",
-        )
-        for name in notes
-    ]
-
-@server.read_resource()
-async def handle_read_resource(uri: AnyUrl) -> str:
-    """
-    Read a specific note's content by its URI.
-    The note name is extracted from the URI host component.
-    """
-    if uri.scheme != "note":
-        raise ValueError(f"Unsupported URI scheme: {uri.scheme}")
-
-    name = uri.path
-    if name is not None:
-        name = name.lstrip("/")
-        return notes[name]
-    raise ValueError(f"Note not found: {name}")
-
-@server.list_prompts()
-async def handle_list_prompts() -> list[types.Prompt]:
-    """
-    List available prompts.
-    Each prompt can have optional arguments to customize its behavior.
-    """
-    return [
-        types.Prompt(
-            name="summarize-notes",
-            description="Creates a summary of all notes",
-            arguments=[
-                types.PromptArgument(
-                    name="style",
-                    description="Style of the summary (brief/detailed)",
-                    required=False,
-                )
-            ],
-        )
-    ]
-
-@server.get_prompt()
-async def handle_get_prompt(
-    name: str, arguments: dict[str, str] | None
-) -> types.GetPromptResult:
-    """
-    Generate a prompt by combining arguments with server state.
-    The prompt includes all current notes and can be customized via arguments.
-    """
-    if name != "summarize-notes":
-        raise ValueError(f"Unknown prompt: {name}")
-
-    style = (arguments or {}).get("style", "brief")
-    detail_prompt = " Give extensive details." if style == "detailed" else ""
-
-    return types.GetPromptResult(
-        description="Summarize the current notes",
-        messages=[
-            types.PromptMessage(
-                role="user",
-                content=types.TextContent(
-                    type="text",
-                    text=f"Here are the current notes to summarize:{detail_prompt}\n\n"
-                    + "\n".join(
-                        f"- {name}: {content}"
-                        for name, content in notes.items()
-                    ),
-                ),
-            )
-        ],
-    )
 
 @server.list_tools()
 async def handle_list_tools() -> list[types.Tool]:
@@ -101,17 +19,49 @@ async def handle_list_tools() -> list[types.Tool]:
     """
     return [
         types.Tool(
-            name="add-note",
-            description="Add a new note",
+            name="get-raw-text",
+            description="Extracts raw text content directly from URLs without browser rendering. Ideal for structured data formats like JSON, XML, CSV, TSV, or plain text files. Best used when fast, direct access to the source content is needed without processing dynamic elements.",  # noqa: E501
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "name": {"type": "string"},
-                    "content": {"type": "string"},
+                    "url": {"type": "string", "description":"URL of the target web page (text, JSON, XML, csv, tsv, etc.)."}  # noqa: E501
                 },
-                "required": ["name", "content"],
+                "required": ["url"],
             },
-        )
+        ),
+         types.Tool(
+            name="get-rendered-html",
+            description="Fetches fully rendered HTML content using a headless browser, including JavaScript-generated content. Essential for modern web applications, single-page applications (SPAs), or any content that requires client-side rendering to be complete.",  # noqa: E501
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description":"URL of the target web page (ordinary HTML including JavaScript, etc.)."}  # noqa: E501
+                },
+                "required": ["url"],
+            },
+        ),
+       types.Tool(
+            name="get-markdown",
+            description="Converts web page content to well-formatted Markdown, preserving structural elements like tables and definition lists. Recommended as the default tool for web content extraction when a clean, readable text format is needed while maintaining document structure.",  # noqa: E501
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description":"URL of the target web page (ordinary HTML, etc.)."}  # noqa: E501
+                },
+                "required": ["url"],
+            },
+        ),
+        types.Tool(
+            name="get-markdown-from-media",
+            description="Performs AI-powered content extraction from media files (images and videos) and converts the results to Markdown format. Specialized tool for visual content analysis that utilizes computer vision and OCR capabilities to generate descriptive text from media sources.",  # noqa: E501
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description":"URL of the target web page (images, videos, etc.)."}  # noqa: E501
+                },
+                "required": ["url"],
+            },
+        ), 
     ]
 
 @server.call_tool()
@@ -120,35 +70,61 @@ async def handle_call_tool(
 ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
     """
     Handle tool execution requests.
-    Tools can modify server state and notify clients of changes.
-    """
-    if name != "add-note":
-        raise ValueError(f"Unknown tool: {name}")
+    
+    tools can get information from a target web page, given a URL. Key features are as follows:    
+    """  # noqa: E501
+    
+    try:
+    
+        if name not in ["get-raw-text","get-rendered-html", "get-markdown", "get-markdown-from-media"]:  # noqa: E501
+            raise ValueError(f"Unknown tool: {name}")
+        
+        if not arguments:
+            raise ValueError("Missing arguments")
 
-    if not arguments:
-        raise ValueError("Missing arguments")
+        url = arguments.get("url", None)
 
-    note_name = arguments.get("name")
-    content = arguments.get("content")
+        if not url:
+            raise ValueError("Missing URL parameter")
 
-    if not note_name or not content:
-        raise ValueError("Missing name or content")
-
-    # Update server state
-    notes[note_name] = content
-
-    # Notify clients that resources have changed
-    await server.request_context.session.send_resource_list_changed()
-
-    return [
-        types.TextContent(
-            type="text",
-            text=f"Added note '{note_name}' with content: {content}",
-        )
-    ]
+        result_string = ""
+        try:
+            if name == "get-raw-text":
+                result_string = await get_raw_text(url)
+            elif name == "get-rendered-html":
+                parsed_html = await get_parsed_html_string_by_playwright(url)
+                result_string = str(parsed_html)
+            elif name == "get-markdown":
+                parsed_html = await get_parsed_html_string_by_playwright(url)
+                result:_markitdown.DocumentConverterResult = _markitdown.HtmlConverter()._convert(parsed_html)  # noqa: E501
+                result_string = str(result.text_content)
+            elif name == "get-markdown-from-media":
+                if not config.OPENAI_API_KEY:
+                    raise ValueError("OPENAI_API_KEY is not set")
+                client = OpenAI(api_key=config.OPENAI_API_KEY)
+                md = MarkItDown(llm_client=client, llm_model=config.MODEL_NAME)
+                result_string = md.convert(url).text_content
+            else:
+                result_string = "Error: Unknown tool"
+        except Exception as e:
+            result_string = f"Error processing {name}: {str(e)}"
+        
+        return [
+            types.TextContent(
+                type="text",
+                text=result_string
+            )
+        ]
+    
+    except Exception as e:
+        return [
+            types.TextContent(
+                type="text",
+                text=str(e)
+            )
+        ]
 
 async def main():
-    # Run the server using stdin/stdout streams
     async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
         await server.run(
             read_stream,
@@ -162,3 +138,26 @@ async def main():
                 ),
             ),
         )
+
+async def get_raw_text(url:str)->str:
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        return response.text
+
+async def get_parsed_html_string_by_playwright(url:str)->str:
+    
+    async with async_playwright() as p:
+        browser = await p.chromium.launch()
+        page = await browser.new_page()
+        await page.goto(url)
+        parsed_html = await page.content()
+        await browser.close()
+        return parsed_html
+    # with sync_playwright() as p:
+    #     browser = p.chromium.launch()
+    #     page = browser.new_page()
+    #     page.goto(request_url)
+    #     parsed_html = page.content()
+    #     browser.close()
+    #     return parsed_html
