@@ -1,0 +1,17 @@
+[project]
+name = "mcp-server-fetch-python"
+version = "0.1.0"
+description = "A MCP server project"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [ "mcp>=1.2.0",]
+[[project.authors]]
+name = "tatn"
+email = "tatn@users.noreply.github.com"
+
+[build-system]
+requires = [ "hatchling",]
+build-backend = "hatchling.build"
+
+[project.scripts]
+mcp-server-fetch-python = "mcp_server_fetch_python:main"
