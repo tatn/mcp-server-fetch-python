@@ -2,6 +2,8 @@
 
 An MCP server for fetching and transforming web content into various formats. This server provides comprehensive tools for extracting content from web pages, including support for JavaScript-rendered content and media files.
 
+<a href="https://glama.ai/mcp/servers/8d0zm2o56d"><img width="380" height="200" src="https://glama.ai/mcp/servers/8d0zm2o56d/badge" alt="Server Fetch Python MCP server" /></a>
+
 ## Features
 
 ### Tools
