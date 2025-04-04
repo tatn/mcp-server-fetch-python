@@ -96,7 +96,7 @@ async def handle_call_tool(
                 result_string = str(parsed_html)
             elif name == "get-markdown":
                 parsed_html = await get_parsed_html_string_by_playwright(url)
-                result:_markitdown.DocumentConverterResult = _markitdown.HtmlConverter()._convert(parsed_html)  # noqa: E501
+                result:_markitdown.DocumentConverterResult = _markitdown.HtmlConverter().convert_string(parsed_html)  # noqa: E501
                 result_string = str(result.text_content)
             elif name == "get-markdown-from-media":
                 if not config.OPENAI_API_KEY:

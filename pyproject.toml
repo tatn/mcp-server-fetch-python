@@ -1,6 +1,6 @@
 [project]
 name = "mcp-server-fetch-python"
-version = "0.1.0"
+version = "0.1.1"
 description = "This is an MCP server that provides comprehensive tools for extracting and transforming web content into various formats, including support for JavaScript-rendered content and media files"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -14,7 +14,7 @@ classifiers = [
 ]
 dependencies = [
  "httpx>=0.28.1",
- "markitdown>=0.0.1a3",
+ "markitdown>=0.1.1",
  "mcp>=1.2.0",
  "openai>=1.59.8",
  "playwright>=1.49.1",
